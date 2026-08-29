@@ -5,13 +5,15 @@
 -- `npm run create-users` to create the logins.
 --
 -- Design choices, and why:
---   - Quotation numbers are issued by ONE server-side function, never by the
---     browser. Two people hitting Save at the same moment cannot be handed the
---     same number, and a number is never reused after a delete.
---   - The next number is derived from the highest number already stored for
---     that financial year, not from a counter the app keeps in sync by hand.
---     Backfill an old quotation with seq 42 and the next one issued is 43 --
---     no reset, no manual bookkeeping.
+--   - Quotation numbers are issued by a BEFORE INSERT trigger, never by the
+--     browser, so the lock and the insert share one transaction. Two people
+--     hitting Save at the same moment cannot be handed the same number.
+--   - The sequence comes from the quotation_numbers ledger, not from max(seq)
+--     over the live quotations. That distinction matters: deriving it from the
+--     live table meant deleting the highest-numbered quotation released its
+--     number for reuse, so two documents could reach two clients both marked
+--     AC/2026-27/003. Backfilling an explicit number records it in the ledger
+--     too, so it can never be issued to anything else.
 --   - Line items live in a jsonb column rather than a child table. A quotation
 --     is printed as a frozen document; its lines are never queried across
 --     quotations, so a child table would buy joins we would never use.
@@ -184,6 +186,34 @@ as $$
   end;
 $$;
 
+-- Every number ever issued, recorded permanently.
+--
+-- The sequence used to be derived from max(seq) over the live quotations table.
+-- Delete the highest-numbered quotation and that number was handed straight
+-- back out -- so two different documents could reach two clients both marked
+-- AC/2026-27/003. For a quotation register that is a defect, not a nicety.
+--
+-- This ledger is never deleted from in normal use, so a number leaves the pool
+-- the moment it is issued, whatever later happens to the quotation itself.
+create table if not exists quotation_numbers (
+  quote_no text primary key,
+  fy text not null,
+  seq integer not null,
+  quotation_id uuid,          -- deliberately no FK: written by a BEFORE trigger,
+  issued_by uuid,             -- before the quotation row itself exists
+  issued_at timestamptz not null default now(),
+  unique (fy, seq)
+);
+
+-- No policies, on purpose. Only the SECURITY DEFINER functions below read or
+-- write it, and they bypass RLS; clients get no direct path to the ledger.
+alter table quotation_numbers enable row level security;
+
+-- Safe to run against a database that already holds quotations.
+insert into quotation_numbers (quote_no, fy, seq, quotation_id, issued_by, issued_at)
+  select quote_no, fy, seq, id, created_by, created_at from quotations
+  on conflict (quote_no) do nothing;
+
 -- Peek at what the next number would be, without consuming it. Used to show
 -- "Next: AC/2026-27/008" in the UI before anything is saved.
 create or replace function peek_quotation_number(d date default current_date)
@@ -195,7 +225,7 @@ stable
 as $$
   select coalesce((select quote_prefix from business_settings where id = 1), 'AC')
       || '/' || fy_label(d) || '/'
-      || lpad((coalesce((select max(seq) from quotations where fy = fy_label(d)), 0) + 1)::text, 3, '0');
+      || lpad((coalesce((select max(seq) from quotation_numbers where fy = fy_label(d)), 0) + 1)::text, 3, '0');
 $$;
 
 -- Issue the number, inside the inserting transaction.
@@ -207,9 +237,7 @@ $$;
 -- and only the unique index would catch it, after the fact.
 --
 -- Here the lock and the INSERT are the same transaction, so concurrent inserts
--- genuinely queue and receive distinct numbers. Derived from max(seq), so a
--- backfilled historical row shifts the sequence forward on its own; an insert
--- that supplies quote_no explicitly (backfilling one) is left alone.
+-- genuinely queue and receive distinct numbers.
 create or replace function assign_quotation_number()
 returns trigger
 language plpgsql
@@ -221,19 +249,30 @@ declare
   v_seq integer;
   v_prefix text;
 begin
+  v_fy := fy_label(new.quote_date);
+
+  -- An explicit number (backfilling a historical quotation) is respected, but
+  -- still recorded, so it can never be issued to anything else.
   if new.quote_no is not null and new.quote_no <> '' then
+    insert into quotation_numbers (quote_no, fy, seq, quotation_id, issued_by)
+      values (new.quote_no, coalesce(nullif(new.fy, ''), v_fy), coalesce(nullif(new.seq, 0), 0),
+              new.id, new.created_by)
+      on conflict (quote_no) do nothing;
     return new;
   end if;
 
-  v_fy := fy_label(new.quote_date);
   perform pg_advisory_xact_lock(hashtext('aali_quotation_seq_' || v_fy));
 
-  select coalesce(max(q.seq), 0) + 1 into v_seq from quotations q where q.fy = v_fy;
+  select coalesce(max(n.seq), 0) + 1 into v_seq from quotation_numbers n where n.fy = v_fy;
   select coalesce(b.quote_prefix, 'AC') into v_prefix from business_settings b where b.id = 1;
 
   new.fy := v_fy;
   new.seq := v_seq;
   new.quote_no := v_prefix || '/' || v_fy || '/' || lpad(v_seq::text, 3, '0');
+
+  insert into quotation_numbers (quote_no, fy, seq, quotation_id, issued_by)
+    values (new.quote_no, new.fy, new.seq, new.id, new.created_by);
+
   return new;
 end;
 $$;

@@ -21,10 +21,17 @@ Tight) buys a few extra lines without editing content. The sheet is a real 210×
 box, so what is measured on screen is what prints.
 
 **Numbers issued by the database.** Format `AC/2026-27/007` — prefix, Indian
-financial year, running sequence. The next number is derived from the highest one
-already stored for that year, inside an advisory lock, so two people saving at the
-same instant get 007 and 008 rather than 007 twice. A deleted quotation's number is
-never re-used, and backfilling an older row shifts the sequence forward on its own.
+financial year, running sequence. A `BEFORE INSERT` trigger assigns it, so the
+advisory lock and the insert share one transaction and two people saving in the
+same instant get 007 and 008 rather than 007 twice. (An RPC the client calls
+first would not do this: it commits and releases the lock before the client's
+separate insert.)
+
+The sequence comes from the `quotation_numbers` ledger, which records every
+number ever issued and is never deleted from — so deleting a quotation does not
+release its number back into the pool. Two documents can never reach two clients
+both marked `AC/2026-27/003`. Backfilling a quotation with an explicit number
+records that number in the ledger too.
 
 **Indian tax handling.** CGST+SGST within state, IGST across states, zero-rated
 export under LUT, or none. Optional TDS 194J @ 2% note showing the net the client
@@ -53,7 +60,7 @@ npm install
 In the Supabase project → SQL Editor → paste and run
 [`supabase/schema.sql`](supabase/schema.sql). It is safe to re-run.
 
-That creates `profiles`, `business_settings`, `quotations`, the numbering
+That creates `profiles`, `business_settings`, `quotations`, `quotation_numbers`, the numbering
 functions, the register view and all row-level-security policies.
 
 ### 3. Point the app at the project
@@ -177,7 +184,7 @@ src/
   pages/
     Login.jsx  Quotations.jsx  Editor.jsx  Business.jsx  Admin.jsx
     SheetPreview.jsx    dev-only template preview
-supabase/schema.sql   tables, numbering functions, RLS policies
+supabase/schema.sql   tables, the number ledger, numbering trigger, RLS policies
 scripts/create-users.mjs
 ```
 
@@ -187,5 +194,9 @@ scripts/create-users.mjs
   never queried across quotations, so a child table would only add joins.
 - Totals are **stored**, not recomputed on read. The register shows the figure that
   was actually printed, even if tax rules change later.
-- Deleting a quotation frees nothing: the number stays consumed. That is deliberate
-  — a quotation register with reused numbers is worse than one with gaps.
+- Deleting a quotation frees nothing: the number stays burned in the
+  `quotation_numbers` ledger and is never issued again. A quotation register with
+  reused numbers is worse than one with gaps.
+- The ledger has RLS enabled and **no policies at all**. Only the `SECURITY
+  DEFINER` numbering functions touch it, and they bypass RLS, so clients have no
+  direct read or write path to it.
