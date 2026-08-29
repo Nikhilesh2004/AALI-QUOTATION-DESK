@@ -161,11 +161,22 @@ export default function Editor() {
                 Unsaved
               </span>
             )}
-            <button className="btn btn-primary btn-sm" type="button" onClick={save} disabled={saving}>
+            <button className="btn btn-primary btn-sm" type="button" onClick={save} disabled={saving || Boolean(quote.deleted_at)}>
               {saving ? 'Saving…' : quote.id ? 'Save changes' : 'Save & issue number'}
             </button>
           </div>
         </div>
+
+        {quote.deleted_at && (
+          <div className="m-3 rounded-lg px-3 py-2.5 text-[12.5px]"
+            style={{ background: 'var(--color-gold-100)', border: '1px solid var(--color-gold-300)', color: 'var(--color-gold-900)' }}>
+            <strong>This quotation was deleted.</strong> It is kept for the record and cannot be
+            edited. Restore it from the register to make changes.
+            {quote.delete_reason && (
+              <span className="mt-1 block italic">Reason given: "{quote.delete_reason}"</span>
+            )}
+          </div>
+        )}
 
         {error && (
           <p className="m-3 rounded-lg px-3 py-2 text-[12.5px]"

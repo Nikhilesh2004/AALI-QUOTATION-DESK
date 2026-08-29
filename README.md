@@ -41,6 +41,18 @@ will actually remit. Amounts in words use lakh/crore for INR and million for USD
 by status and financial year, with value quoted and value accepted. Staff see their
 own; a super admin can switch the scope to everyone.
 
+**Deleting keeps the record.** Deleting a quotation retires it rather than removing
+it, and the person deleting must give a reason of at least five characters. The
+quotation then disappears from their register completely. A super admin can switch
+the scope to **Deleted** to see every retired quotation with its full data, the
+reason given, who deleted it and when, and can restore it.
+
+The reason is enforced by the database, not the dialog: `delete_quotation()` refuses
+a short one whoever calls it, including a direct REST call. Deletion has to go
+through that function because Postgres requires an updated row to stay visible under
+the SELECT policy -- and the point of retiring a quotation is that its owner can no
+longer see it, so a plain UPDATE could never do it.
+
 **One letterhead.** Business name, the Aali Group subsidiary line, GSTIN, PAN, logo,
 default terms and payment details live in one shared row. Change it once and every
 future quotation follows. Only a super admin can edit it.
@@ -111,8 +123,8 @@ Roles:
 
 | Role | Can do |
 | --- | --- |
-| `staff` | Create, edit, print and delete their own quotations. Read the letterhead. |
-| `super_admin` | All of that, plus read and edit **everyone's** quotations, edit the letterhead, and change roles. |
+| `staff` | Create, edit and print their own quotations. Delete their own, with a written reason, after which they can no longer see it. Read the letterhead. |
+| `super_admin` | All of that, plus read and edit **everyone's** quotations, see and restore **deleted** ones with their reasons, edit the letterhead, and change roles. |
 
 ### 5. Run it
 

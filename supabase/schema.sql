@@ -149,8 +149,23 @@ create table if not exists quotations (
 
   created_by uuid not null references auth.users(id) on delete restrict,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  -- Soft deletion. A quotation is a document that went to a client, so it is
+  -- retired rather than removed, and always with a written reason.
+  deleted_at timestamptz,
+  deleted_by uuid references auth.users(id),
+  delete_reason text,
+
+  -- Enforced by the database, not the form: a client that skips the dialog or
+  -- calls the REST API directly still cannot retire a quotation silently.
+  constraint quotations_delete_reason_required check (
+    deleted_at is null
+    or (delete_reason is not null and length(btrim(delete_reason)) >= 5)
+  )
 );
+
+create index if not exists quotations_deleted_idx on quotations (deleted_at);
 
 create unique index if not exists quotations_fy_seq_idx on quotations (fy, seq);
 create index if not exists quotations_created_by_idx on quotations (created_by);
@@ -309,22 +324,29 @@ create policy business_admin_write on business_settings
 
 -- Staff see and manage their own quotations; a super admin sees the whole
 -- register -- which is the point of the role.
+-- Staff see their own LIVE quotations. A deleted one disappears from their
+-- register entirely; only a super admin can still read it, which is what makes
+-- the deleted register a super-admin-only view.
 drop policy if exists quotations_read on quotations;
 create policy quotations_read on quotations
-  for select using (created_by = auth.uid() or is_super_admin());
+  for select using ((created_by = auth.uid() and deleted_at is null) or is_super_admin());
 
 drop policy if exists quotations_insert on quotations;
 create policy quotations_insert on quotations
   for insert with check (created_by = auth.uid());
 
+-- Staff may edit only their own live quotations. Once retired the row is out
+-- of their reach, including un-retiring it.
 drop policy if exists quotations_update on quotations;
 create policy quotations_update on quotations
-  for update using (created_by = auth.uid() or is_super_admin())
+  for update using ((created_by = auth.uid() and deleted_at is null) or is_super_admin())
   with check (created_by = auth.uid() or is_super_admin());
 
+-- Hard delete is a super-admin escape hatch, not the normal path. Everyday
+-- deletion is delete_quotation() below, which retires the row instead.
 drop policy if exists quotations_delete on quotations;
 create policy quotations_delete on quotations
-  for delete using (created_by = auth.uid() or is_super_admin());
+  for delete using (is_super_admin());
 
 -- Function grants. Postgres grants EXECUTE to PUBLIC by default, which puts
 -- every one of these on the REST surface as /rest/v1/rpc/<name>. Revoke first,
@@ -354,6 +376,115 @@ create or replace view quotation_register
 with (security_invoker = true) as
   select q.id, q.quote_no, q.fy, q.seq, q.status, q.quote_date, q.valid_until,
          q.client_name, q.subject, q.currency, q.total, q.created_at, q.updated_at,
-         q.created_by, p.full_name as created_by_name, p.email as created_by_email
+         q.created_by, p.full_name as created_by_name, p.email as created_by_email,
+         q.deleted_at, q.deleted_by, q.delete_reason,
+         d.full_name as deleted_by_name
   from quotations q
-  left join profiles p on p.id = q.created_by;
+  left join profiles p on p.id = q.created_by
+  left join profiles d on d.id = q.deleted_by;
+
+-- ---------------------------------------------------------------------------
+-- 7. Deleting and restoring
+-- ---------------------------------------------------------------------------
+-- Stamps who retired a quotation and when, so those fields cannot be forged by
+-- whatever the browser sends, and freezes them once set.
+create or replace function stamp_quotation_deletion()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.deleted_at is null and new.deleted_at is not null then
+    new.deleted_at := now();
+    new.deleted_by := auth.uid();
+
+  elsif old.deleted_at is not null and new.deleted_at is null then
+    if not is_super_admin() then
+      raise exception 'Only a super admin can restore a deleted quotation';
+    end if;
+    new.deleted_by := null;
+    new.delete_reason := null;
+
+  elsif old.deleted_at is not null and new.deleted_at is not null then
+    new.deleted_at := old.deleted_at;
+    new.deleted_by := old.deleted_by;
+    new.delete_reason := old.delete_reason;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists quotations_stamp_deletion on quotations;
+create trigger quotations_stamp_deletion
+  before update on quotations
+  for each row execute function stamp_quotation_deletion();
+
+-- Deletion cannot be a plain UPDATE from the client. Postgres requires the NEW
+-- row version to remain visible under the SELECT policy, and the whole point of
+-- retiring a quotation is that its owner can no longer see it -- so a staff
+-- member could never retire their own quotation that way. A SECURITY DEFINER
+-- function resolves that, and puts the reason requirement, the ownership check
+-- and the audit stamp in one place no client can go around.
+create or replace function delete_quotation(p_id uuid, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner uuid;
+  v_deleted timestamptz;
+  v_reason text := btrim(coalesce(p_reason, ''));
+begin
+  if length(v_reason) < 5 then
+    raise exception 'A reason of at least 5 characters is required to delete a quotation'
+      using errcode = 'check_violation';
+  end if;
+
+  select created_by, deleted_at into v_owner, v_deleted from quotations where id = p_id;
+
+  if v_owner is null then
+    raise exception 'That quotation does not exist' using errcode = 'no_data_found';
+  end if;
+  if v_deleted is not null then
+    raise exception 'That quotation is already deleted' using errcode = 'check_violation';
+  end if;
+
+  -- Checked explicitly: a definer function has bypassed the policies that
+  -- would otherwise do this.
+  if not (v_owner = auth.uid() or is_super_admin()) then
+    raise exception 'You can only delete your own quotations'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  update quotations
+     set deleted_at = now(), deleted_by = auth.uid(), delete_reason = v_reason
+   where id = p_id;
+end;
+$$;
+
+create or replace function restore_quotation(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not is_super_admin() then
+    raise exception 'Only a super admin can restore a deleted quotation'
+      using errcode = 'insufficient_privilege';
+  end if;
+
+  update quotations
+     set deleted_at = null, deleted_by = null, delete_reason = null
+   where id = p_id and deleted_at is not null;
+end;
+$$;
+
+revoke execute on function stamp_quotation_deletion() from public, anon, authenticated;
+revoke execute on function delete_quotation(uuid, text) from public, anon;
+revoke execute on function restore_quotation(uuid) from public, anon;
+grant execute on function delete_quotation(uuid, text) to authenticated;
+grant execute on function restore_quotation(uuid) to authenticated;

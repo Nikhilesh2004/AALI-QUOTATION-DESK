@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthProvider';
 import { supabase } from '../lib/supabase';
 import ScrollTop from '../components/ScrollTop';
+import DeleteDialog from '../components/DeleteDialog';
 import { fmtDate, fyLabel, money } from '../lib/format';
 import { STATUSES } from '../lib/totals';
 
@@ -19,6 +20,7 @@ export default function Quotations() {
   const [status, setStatus] = useState('all');
   const [fy, setFy] = useState('all');
   const [scope, setScope] = useState('mine');
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +50,12 @@ export default function Quotations() {
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
-      if (scope === 'mine' && r.created_by !== session?.user?.id) return false;
+      if (scope === 'deleted') {
+        if (!r.deleted_at) return false;
+      } else {
+        if (r.deleted_at) return false;
+        if (scope === 'mine' && r.created_by !== session?.user?.id) return false;
+      }
       if (status !== 'all' && r.status !== status) return false;
       if (fy !== 'all' && r.fy !== fy) return false;
       if (!needle) return true;
@@ -72,11 +79,33 @@ export default function Quotations() {
     navigate('/new', { state: { seed: { ...data, id: null, quote_no: null, status: 'draft' } } });
   }
 
-  async function remove(row) {
-    if (!confirm(`Delete ${row.quote_no}? The number stays used and is never re-issued.`)) return;
-    const { error: err } = await supabase.from('quotations').delete().eq('id', row.id);
-    if (err) return alert(`Could not delete: ${err.message}`);
-    setRows((prev) => prev.filter((r) => r.id !== row.id));
+  // Routed through delete_quotation() rather than a DELETE or a plain UPDATE:
+  // the reason, the ownership check and the audit stamp all live in that one
+  // function, and a soft-deleted row is deliberately invisible to its owner,
+  // which a direct UPDATE could not produce.
+  async function confirmDelete(reason) {
+    const row = pendingDelete;
+    const { error: err } = await supabase.rpc('delete_quotation', {
+      p_id: row.id,
+      p_reason: reason,
+    });
+    if (err) throw new Error(err.message);
+
+    setPendingDelete(null);
+    if (isSuperAdmin) {
+      // A super admin keeps the row; it moves into the Deleted view.
+      const { data } = await supabase.from('quotation_register').select('*').eq('id', row.id).maybeSingle();
+      setRows((prev) => prev.map((r) => (r.id === row.id ? data || r : r)));
+    } else {
+      setRows((prev) => prev.filter((r) => r.id !== row.id));
+    }
+  }
+
+  async function restore(row) {
+    const { error: err } = await supabase.rpc('restore_quotation', { p_id: row.id });
+    if (err) return alert(`Could not restore: ${err.message}`);
+    const { data } = await supabase.from('quotation_register').select('*').eq('id', row.id).maybeSingle();
+    setRows((prev) => prev.map((r) => (r.id === row.id ? data || r : r)));
   }
 
   return (
@@ -148,6 +177,7 @@ export default function Quotations() {
             <select className="fld" value={scope} onChange={(e) => setScope(e.target.value)}>
               <option value="mine">Mine</option>
               <option value="all">Everyone</option>
+              <option value="deleted">Deleted</option>
             </select>
           </label>
         )}
@@ -175,7 +205,9 @@ export default function Quotations() {
                 <Th>Date</Th>
                 <Th>Client</Th>
                 <Th>Subject</Th>
-                {isSuperAdmin && scope === 'all' && <Th>Issued by</Th>}
+                {isSuperAdmin && scope !== 'mine' && <Th>Issued by</Th>}
+                {scope === 'deleted' && <Th>Deleted by</Th>}
+                {scope === 'deleted' && <Th>Reason</Th>}
                 <Th align="right">Total</Th>
                 <Th>Status</Th>
                 <Th align="right">Actions</Th>
@@ -184,16 +216,18 @@ export default function Quotations() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center" style={{ color: 'var(--color-ink-soft)' }}>
+                  <td colSpan={10} className="p-8 text-center" style={{ color: 'var(--color-ink-soft)' }}>
                     Loading…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center" style={{ color: 'var(--color-ink-soft)' }}>
-                    {rows.length === 0
-                      ? 'No quotations yet. The first one you save becomes ' + (nextNo || 'number 001') + '.'
-                      : 'Nothing matches those filters.'}
+                  <td colSpan={10} className="p-10 text-center" style={{ color: 'var(--color-ink-soft)' }}>
+                    {scope === 'deleted'
+                      ? 'Nothing has been deleted.'
+                      : rows.length === 0
+                        ? 'No quotations yet. The first one you save becomes ' + (nextNo || 'number 001') + '.'
+                        : 'Nothing matches those filters.'}
                   </td>
                 </tr>
               ) : (
@@ -208,19 +242,39 @@ export default function Quotations() {
                     <Td mono>{fmtDate(r.quote_date)}</Td>
                     <Td strong>{r.client_name || '—'}</Td>
                     <Td muted>{r.subject || '—'}</Td>
-                    {isSuperAdmin && scope === 'all' && <Td muted>{r.created_by_name || '—'}</Td>}
+                    {isSuperAdmin && scope !== 'mine' && <Td muted>{r.created_by_name || '—'}</Td>}
+                    {scope === 'deleted' && (
+                      <Td muted>
+                        {r.deleted_by_name || '—'}
+                        <span className="block text-[11px]">{fmtDate(String(r.deleted_at).slice(0, 10))}</span>
+                      </Td>
+                    )}
+                    {scope === 'deleted' && (
+                      <Td muted>
+                        <span className="block max-w-[280px] whitespace-normal">{r.delete_reason || '—'}</span>
+                      </Td>
+                    )}
                     <Td mono align="right">{money(r.total, r.currency)}</Td>
                     <Td>
                       <span className={`pill pill-${r.status}`}>{r.status}</span>
                     </Td>
                     <Td align="right">
                       <span className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <button className="btn btn-sm" type="button" onClick={() => duplicate(r.id)}>
-                          Duplicate
-                        </button>
-                        <button className="btn btn-sm btn-danger" type="button" onClick={() => remove(r)}>
-                          Delete
-                        </button>
+                        {scope === 'deleted' ? (
+                          <button className="btn btn-sm" type="button" onClick={() => restore(r)}>
+                            Restore
+                          </button>
+                        ) : (
+                          <>
+                            <button className="btn btn-sm" type="button" onClick={() => duplicate(r.id)}>
+                              Duplicate
+                            </button>
+                            <button className="btn btn-sm btn-danger" type="button"
+                              onClick={() => setPendingDelete(r)}>
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </span>
                     </Td>
                   </tr>
@@ -235,6 +289,14 @@ export default function Quotations() {
         Numbers run as {nextNo ? nextNo.split('/')[0] : 'AC'}/{fyLabel()}/NNN and are issued by the database when a
         quotation is first saved, so two people saving at once can never receive the same number.
       </p>
+      {pendingDelete && (
+        <DeleteDialog
+          quote={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+
       <ScrollTop className="bottom-6 right-4 sm:right-6" />
     </div>
   );
