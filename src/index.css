@@ -47,10 +47,27 @@
   color-scheme: light;
 }
 
+/* Small screens: the document scrolls, naturally, and content is free to be as
+   tall as it needs. Large screens: lock to the viewport so the form column and
+   the sheet become two independently scrolling panes.
+
+   `height: 100%` everywhere was the bug behind clipped form sections. It gave
+   the whole ancestor chain a definite height, so the flex children inside the
+   form column (which shrink by default and clip via overflow:hidden for their
+   rounded corners) were squashed to fit instead of scrolling -- each card
+   silently showing only its first row or two. */
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
+}
+
+@media (min-width: 1024px) {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 }
 
 body {
@@ -440,6 +457,11 @@ table.sum tr.grand td:last-child {
   .no-print { display: none !important; }
   html, body, #root { height: auto; background: #fff; }
   .print-root { display: block !important; padding: 0 !important; overflow: visible !important; }
-  .paper-scale { transform: none !important; width: auto !important; height: auto !important; }
+  .paper-scale,
+  .paper-scale-inner {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+  }
   .paper { box-shadow: none; width: 210mm; height: 297mm; }
 }

@@ -25,7 +25,15 @@ export default function PaperStage({ children, onFit }) {
   const fitToPane = useCallback(() => {
     const pane = scrollerRef.current;
     if (!pane) return;
-    setScale(Math.min(1, (pane.clientWidth - 44) / A4_W));
+
+    // A hidden pane (the Preview tab on a phone while Edit is showing) reports
+    // clientWidth 0, which would make this negative -- a negative scale flips
+    // the sheet and gives it an invalid width it never recovers from. Keep the
+    // last good scale until the pane is actually laid out.
+    const avail = pane.clientWidth - 44;
+    if (avail <= 0) return;
+
+    setScale(Math.min(1, avail / A4_W));
   }, []);
 
   const measure = useCallback(() => {
@@ -58,13 +66,36 @@ export default function PaperStage({ children, onFit }) {
     measure();
   });
 
+  // ResizeObserver, not a window resize listener. The pane changes width for
+  // reasons a window event never reports: switching between Edit and Preview on
+  // a phone, a device rotating, the browser zooming, the layout reflowing at a
+  // breakpoint. Observing the element itself catches every one of them, and the
+  // sheet would otherwise keep a scale measured for a pane it no longer sits in.
   useEffect(() => {
-    window.addEventListener('resize', fitToPane);
-    document.fonts?.ready.then(() => {
+    const pane = scrollerRef.current;
+    if (!pane) return undefined;
+
+    const refit = () => {
       fitToPane();
       measure();
-    });
-    return () => window.removeEventListener('resize', fitToPane);
+    };
+
+    const ro = new ResizeObserver(refit);
+    ro.observe(pane);
+
+    // Belt and braces: the observer covers element-level changes the window
+    // never reports, and the window event covers environments where the
+    // observer does not fire for a viewport-level resize. Both are idempotent.
+    window.addEventListener('resize', refit);
+    window.addEventListener('orientationchange', refit);
+
+    document.fonts?.ready.then(refit);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', refit);
+      window.removeEventListener('orientationchange', refit);
+    };
   }, [fitToPane, measure]);
 
   const meterColor =
@@ -81,7 +112,7 @@ export default function PaperStage({ children, onFit }) {
         : `Fits one page — ${fit.pct}% used`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-1 flex-col lg:min-h-0">
       <div
         className="no-print flex items-center gap-2 px-4 py-2 text-xs"
         style={{ color: fit?.state === 'over' ? 'var(--color-bad)' : 'var(--color-ink-soft)' }}
@@ -100,18 +131,27 @@ export default function PaperStage({ children, onFit }) {
         <span style={{ fontFamily: 'var(--font-num)' }}>{message}</span>
       </div>
 
-      <div ref={scrollerRef} className="print-root flex flex-1 justify-start overflow-auto p-5">
+      <div ref={scrollerRef} className="print-root flex flex-1 justify-start overflow-x-auto p-3 sm:p-5 lg:overflow-auto">
+        {/* Outer box reserves the SCALED footprint in normal layout flow; the
+            inner box is the one that actually scales, at natural A4 size.
+            Putting the width and the transform on the same element would scale
+            the already-scaled box, so the sheet would paint at scale². */}
         <div
           ref={wrapRef}
-          className="paper-scale mx-auto origin-top"
-          style={{
-            transform: `scale(${scale})`,
-            width: A4_W * scale,
-            height: A4_H * scale,
-            flex: 'none',
-          }}
+          className="paper-scale mx-auto"
+          style={{ width: A4_W * scale, height: A4_H * scale, flex: 'none' }}
         >
-          {children}
+          <div
+            className="paper-scale-inner"
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              width: A4_W,
+              height: A4_H,
+            }}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </div>

@@ -26,9 +26,9 @@ export default function Layout() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex h-full min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col lg:h-full">
       <header
-        className="no-print flex flex-wrap items-center gap-3 px-4 py-2.5"
+        className="no-print flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-line)' }}
       >
         <img src={business?.logo_url || "/logo.svg"} alt="" className="h-8 w-8 shrink-0 object-contain" />
@@ -51,8 +51,8 @@ export default function Layout() {
           {isSuperAdmin && <Tab to="/admin">Admin</Tab>}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
-          <div className="text-right leading-tight">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <div className="hidden text-right leading-tight sm:block">
             <div className="text-[12.5px] font-semibold">{profile?.full_name}</div>
             <div className="text-[10.5px] uppercase tracking-wider" style={{ color: 'var(--color-ink-soft)' }}>
               {profile?.role === 'super_admin' ? 'Super admin' : 'Staff'}
@@ -71,7 +71,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="flex flex-1 flex-col lg:min-h-0">
         <Outlet />
       </main>
     </div>

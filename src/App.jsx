@@ -9,6 +9,7 @@ import Editor from './pages/Editor';
 import Business from './pages/Business';
 import Admin from './pages/Admin';
 import SheetPreview from './pages/SheetPreview';
+import UiPreview from './pages/UiPreview';
 
 // Shown instead of a blank page when the deploy has no Supabase credentials.
 function NotConfigured() {
@@ -39,6 +40,9 @@ export default function App() {
   // out of the production bundle, and never reachable on the deployed site.
   if (import.meta.env.DEV && window.location.pathname === '/preview') {
     return <SheetPreview />;
+  }
+  if (import.meta.env.DEV && window.location.pathname === '/preview/editor') {
+    return <UiPreview />;
   }
 
   if (!isConfigured) return <NotConfigured />;

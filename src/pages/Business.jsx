@@ -55,7 +55,7 @@ export default function Business() {
   const ro = !isSuperAdmin;
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 p-5">
+    <div className="mx-auto w-full max-w-3xl flex-1 p-3 sm:p-5">
       <div className="mb-4">
         <h2 className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-doc)' }}>
           Your business
@@ -115,7 +115,7 @@ export default function Business() {
             placeholder="Street, City, State — PIN" onChange={(e) => set({ address: e.target.value })} />
         </F>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <F label="GSTIN">
             <input className="fld" disabled={ro} value={form.gstin || ''} onChange={(e) => set({ gstin: e.target.value })} />
           </F>
@@ -127,7 +127,7 @@ export default function Business() {
           </F>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <F label="Email">
             <input className="fld" disabled={ro} value={form.email || ''} onChange={(e) => set({ email: e.target.value })} />
           </F>
@@ -136,7 +136,7 @@ export default function Business() {
           </F>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <F label="Quotation number prefix" hint="AC gives AC/2026-27/001.">
             <input className="fld" disabled={ro} value={form.quote_prefix || ''}
               onChange={(e) => set({ quote_prefix: e.target.value.toUpperCase() })} />
@@ -146,7 +146,7 @@ export default function Business() {
           </F>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <F label="Default signatory name">
             <input className="fld" disabled={ro} value={form.sign_name || ''} onChange={(e) => set({ sign_name: e.target.value })} />
           </F>

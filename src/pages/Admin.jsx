@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import ScrollTop from '../components/ScrollTop';
 import { fmtDate, money } from '../lib/format';
 import { STATUSES } from '../lib/totals';
 
@@ -75,7 +76,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 p-5">
+    <div className="mx-auto w-full max-w-6xl flex-1 p-3 sm:p-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-doc)' }}>
@@ -195,6 +196,7 @@ export default function Admin() {
           </table>
         </div>
       </div>
+      <ScrollTop className="bottom-6 right-4 sm:right-6" />
     </div>
   );
 }

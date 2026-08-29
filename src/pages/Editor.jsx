@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/AuthProvider';
 import { supabase } from '../lib/supabase';
@@ -7,6 +7,7 @@ import { computeTotals, STATUSES, TAX_MODES } from '../lib/totals';
 import { blankItem, blankQuotation, DENSITIES, PRESETS } from '../lib/defaults';
 import QuotationSheet from '../components/QuotationSheet';
 import PaperStage from '../components/PaperStage';
+import ScrollTop from '../components/ScrollTop';
 
 // Columns the quotations table actually has. Anything else on the object (the
 // register view's joined names, for instance) must not be sent to Postgres.
@@ -30,6 +31,7 @@ export default function Editor() {
   const [dirty, setDirty] = useState(false);
   const [density, setDensity] = useState('1');
   const [pane, setPane] = useState('edit'); // small screens only
+  const formRef = useRef(null);
 
   // Load an existing quotation.
   useEffect(() => {
@@ -138,10 +140,10 @@ export default function Editor() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+    <div className="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
       {/* ---------------- form ---------------- */}
       <aside
-        className={`no-print flex w-full shrink-0 flex-col lg:w-[430px] ${pane === 'edit' ? '' : 'hidden lg:flex'}`}
+        className={`no-print flex w-full flex-col lg:w-[430px] lg:min-h-0 lg:shrink-0 ${pane === 'edit' ? '' : 'hidden lg:flex'}`}
         style={{ background: 'var(--color-surface)', borderRight: '1px solid var(--color-line)' }}
       >
         <div className="flex flex-wrap items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid var(--color-line)' }}>
@@ -172,7 +174,7 @@ export default function Editor() {
           </p>
         )}
 
-        <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+        <div ref={formRef} className="flex flex-1 flex-col gap-2.5 p-3 pb-28 sm:p-4 sm:pb-28 lg:min-h-0 lg:overflow-y-auto lg:pb-4">
           <Section title="Quotation details" open>
             <Row cols={2}>
               <Field label="Date">
@@ -267,7 +269,7 @@ export default function Editor() {
                   </div>
                   <input className="fld" placeholder="Sub-note (optional) — what is included" value={it.note}
                     onChange={(e) => setItem(i, { note: e.target.value })} />
-                  <div className="grid grid-cols-[.75fr_.75fr_1fr_auto] items-end gap-1.5">
+                  <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[.75fr_.75fr_1fr_auto]">
                     <Field label="Qty">
                       <input className="fld" type="number" step="0.01" min="0" value={it.qty}
                         onChange={(e) => setItem(i, { qty: e.target.value })} />
@@ -279,7 +281,7 @@ export default function Editor() {
                       <input className="fld" type="number" step="0.01" min="0" value={it.rate}
                         onChange={(e) => setItem(i, { rate: e.target.value })} />
                     </Field>
-                    <div className="min-w-[80px] pb-2 text-right text-[12.5px] font-semibold"
+                    <div className="col-span-2 min-w-[80px] pb-2 text-right text-[12.5px] font-semibold sm:col-span-1"
                       style={{ fontFamily: 'var(--font-num)', fontVariantNumeric: 'tabular-nums' }}>
                       {money(num(it.qty) * num(it.rate), quote.currency)}
                     </div>
@@ -351,8 +353,8 @@ export default function Editor() {
       </aside>
 
       {/* ---------------- sheet ---------------- */}
-      <section className={`flex min-h-0 flex-1 flex-col ${pane === 'view' ? '' : 'hidden lg:flex'}`}>
-        <div className="no-print flex flex-wrap items-center justify-end gap-2 px-4 py-2"
+      <section className={`flex flex-1 flex-col pb-24 lg:min-h-0 lg:pb-0 ${pane === 'view' ? '' : 'hidden lg:flex'}`}>
+        <div className="no-print flex flex-wrap items-center justify-end gap-2 px-3 py-2 sm:px-4"
           style={{ borderBottom: '1px solid var(--color-line)' }}>
           <select className="fld w-auto py-1.5 text-[12.5px]" value={density} onChange={(e) => setDensity(e.target.value)}>
             {DENSITIES.map((d) => (
@@ -372,6 +374,8 @@ export default function Editor() {
         </PaperStage>
       </section>
 
+      <ScrollTop containerRef={formRef} className="bottom-20 right-4 lg:bottom-6 lg:right-6" />
+
       {/* small-screen pane switch */}
       <div className="no-print fixed bottom-4 left-1/2 flex -translate-x-1/2 gap-1 rounded-full p-1 shadow-lg lg:hidden"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)' }}>
@@ -390,7 +394,7 @@ export default function Editor() {
 
 function Section({ title, open = false, children }) {
   return (
-    <details className="overflow-hidden rounded-[10px]" open={open}
+    <details className="shrink-0 overflow-hidden rounded-[10px]" open={open}
       style={{ border: '1px solid var(--color-line)', background: 'var(--color-surface)' }}>
       <summary className="cursor-pointer list-none px-3 py-2.5 text-[13px] font-semibold"
         style={{ background: 'var(--color-gold-50)' }}>
@@ -402,7 +406,11 @@ function Section({ title, open = false, children }) {
 }
 
 function Row({ cols = 2, children }) {
-  return <div className={`grid gap-2.5 ${cols === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>{children}</div>;
+  return (
+    <div className={`grid gap-2.5 ${cols === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+      {children}
+    </div>
+  );
 }
 
 function Field({ label, children }) {

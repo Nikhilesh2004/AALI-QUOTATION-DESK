@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthProvider';
 import { supabase } from '../lib/supabase';
+import ScrollTop from '../components/ScrollTop';
 import { fmtDate, fyLabel, money } from '../lib/format';
 import { STATUSES } from '../lib/totals';
 
@@ -79,7 +80,7 @@ export default function Quotations() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 p-5">
+    <div className="mx-auto w-full max-w-6xl flex-1 p-3 sm:p-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-doc)' }}>
@@ -234,6 +235,7 @@ export default function Quotations() {
         Numbers run as {nextNo ? nextNo.split('/')[0] : 'AC'}/{fyLabel()}/NNN and are issued by the database when a
         quotation is first saved, so two people saving at once can never receive the same number.
       </p>
+      <ScrollTop className="bottom-6 right-4 sm:right-6" />
     </div>
   );
 }
