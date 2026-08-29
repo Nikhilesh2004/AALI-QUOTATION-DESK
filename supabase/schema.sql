@@ -43,7 +43,12 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'role', 'staff')
+    -- Always 'staff', never a role read out of the new user's own metadata:
+    -- that field is supplied by whoever creates the account, so honouring it
+    -- would let anyone self-register as super_admin if signups were ever
+    -- enabled. Elevating someone is a deliberate act done with the service
+    -- key (scripts/create-users.mjs) or by an existing super admin.
+    'staff'
   )
   on conflict (id) do nothing;
   return new;
@@ -56,7 +61,9 @@ create trigger on_auth_user_created
   for each row execute function handle_new_user();
 
 create or replace function is_super_admin()
-returns boolean language sql security definer stable as $$
+returns boolean language sql security definer stable
+set search_path = public
+as $$
   select exists (select 1 from profiles where id = auth.uid() and role = 'super_admin');
 $$;
 
@@ -147,7 +154,9 @@ create index if not exists quotations_date_idx on quotations (quote_date desc);
 create index if not exists quotations_client_idx on quotations (client_name);
 
 create or replace function touch_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   new.updated_at = now();
   return new;
@@ -163,7 +172,9 @@ create trigger quotations_touch before update on quotations
 -- ---------------------------------------------------------------------------
 -- Indian financial year label for a date: 15 Aug 2026 -> '2026-27'.
 create or replace function fy_label(d date)
-returns text language sql immutable as $$
+returns text language sql immutable
+set search_path = ''
+as $$
   select case
     when extract(month from d) >= 4
       then extract(year from d)::int || '-' || right((extract(year from d)::int + 1)::text, 2)
@@ -253,8 +264,25 @@ drop policy if exists quotations_delete on quotations;
 create policy quotations_delete on quotations
   for delete using (created_by = auth.uid() or is_super_admin());
 
+-- Function grants. Postgres grants EXECUTE to PUBLIC by default, which puts
+-- every one of these on the REST surface as /rest/v1/rpc/<name>. Revoke first,
+-- then hand back only what a signed-in colleague genuinely needs.
+
+-- Trigger-only: it runs as the definer from the trigger, so no client role
+-- needs EXECUTE on it at all.
+revoke execute on function handle_new_user() from public, anon, authenticated;
+
+-- These reveal how many quotations the company has issued -- fine for a
+-- signed-in colleague, nobody else's business.
+revoke execute on function peek_quotation_number(date) from public, anon;
+revoke execute on function next_quotation_number(date) from public, anon;
 grant execute on function peek_quotation_number(date) to authenticated;
 grant execute on function next_quotation_number(date) to authenticated;
+
+-- Answers only "is the caller an admin". The RLS policies call it, so
+-- authenticated must keep EXECUTE; anonymous callers have no rows anyway.
+revoke execute on function is_super_admin() from public, anon;
+grant execute on function is_super_admin() to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 6. Register view -- the "who issued what" list a super admin reads
