@@ -84,7 +84,7 @@ export function blankQuotation(business) {
     items: [blankItem()],
     discount_type: 'none',
     discount_value: 0,
-    tax_mode: business?.default_tax_mode || 'intra',
+    tax_mode: 'intra',
     tax_rate: 18,
     round_off: true,
     show_tds: false,
