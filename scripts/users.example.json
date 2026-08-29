@@ -1,0 +1,12 @@
+[
+  {
+    "email": "aalitechprivatelimited@gmail.com",
+    "full_name": "Aali Super Admin",
+    "role": "super_admin"
+  },
+  {
+    "email": "staff@example.com",
+    "full_name": "Staff Member",
+    "role": "staff"
+  }
+]

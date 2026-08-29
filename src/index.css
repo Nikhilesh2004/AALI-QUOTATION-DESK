@@ -1,0 +1,445 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   AALI QUOTATION DESK -- design tokens
+   ----------------------------------------------------------------------------
+   Palette is taken from the Aali mark (the golden "a") and deliberately pitched
+   to the LIGHT end of it: the saturated logo gold is reserved for the mark,
+   rules and the total, while every surface sits in the pale cream/amber tints
+   above it. Small text never uses the bright gold -- it drops to --c-gold-700
+   or darker so labels stay legible on white at 8pt.
+
+   Single light theme on purpose. This app exists to produce a printed white
+   A4 document; a dark chrome around a white page fights the thing itself.
+   Every colour is painted explicitly, so the page is correct on any host.
+   ========================================================================== */
+@theme {
+  --color-gold-50: #fffcf3;
+  --color-gold-100: #fff6df;
+  --color-gold-200: #ffebbb;
+  --color-gold-300: #ffdc8a;
+  --color-gold-400: #ffc94f;
+  --color-gold-500: #ffb81f;
+  --color-gold-600: #eda100;
+  --color-gold-700: #b87400;
+  --color-gold-800: #9a6400;
+  --color-gold-900: #6d4600;
+
+  --color-ink: #33280f;
+  --color-ink-soft: #6b5c3c;
+  --color-ink-faint: #94836044;
+
+  --color-desk: #fbf4e6;
+  --color-surface: #fffdf8;
+  --color-line: #efe3c6;
+  --color-line-soft: #f6eed9;
+
+  --color-ok: #2f7d54;
+  --color-warn: #a8620a;
+  --color-bad: #a83232;
+
+  --font-ui: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-doc: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-num: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-desk);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- form primitives ---------- */
+.fld {
+  width: 100%;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: var(--color-ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.fld:hover {
+  border-color: var(--color-gold-300);
+}
+.fld:focus {
+  outline: none;
+  border-color: var(--color-gold-500);
+  box-shadow: 0 0 0 3px var(--color-gold-100);
+}
+.fld::placeholder {
+  color: var(--color-ink-soft);
+  opacity: 0.55;
+}
+textarea.fld {
+  line-height: 1.5;
+  resize: vertical;
+}
+input.fld[type='number'],
+input.fld[type='date'] {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.lbl {
+  font-size: 10.5px;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  font-weight: 600;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border-radius: 7px;
+  border: 1px solid var(--color-line);
+  background: #fff;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--color-gold-400);
+  background: var(--color-gold-50);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: linear-gradient(180deg, var(--color-gold-400), var(--color-gold-500));
+  border-color: var(--color-gold-600);
+  color: #4a3400;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--color-gold-500), var(--color-gold-600));
+  border-color: var(--color-gold-700);
+}
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.btn-danger {
+  color: var(--color-bad);
+}
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--color-bad);
+  background: #fdf3f3;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+
+.chip-add {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--color-line);
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chip-add:hover {
+  border-style: solid;
+  border-color: var(--color-gold-500);
+  color: var(--color-gold-800);
+  background: var(--color-gold-50);
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+  border: 1px solid transparent;
+}
+.pill-draft { background: #f2efe6; color: #6b5c3c; border-color: #e3dbc8; }
+.pill-sent { background: var(--color-gold-100); color: var(--color-gold-900); border-color: var(--color-gold-300); }
+.pill-accepted { background: #e6f4ec; color: #216441; border-color: #bfe0cd; }
+.pill-declined { background: #fbeceb; color: #8f2a2a; border-color: #f0cfcd; }
+.pill-expired { background: #f1f0ee; color: #6d6a63; border-color: #ddd9d1; }
+
+/* ============================================================================
+   The A4 sheet. Sized in mm so what is measured on screen is what prints.
+   Kept as hand-written CSS rather than utilities: the fit meter measures this
+   element, and print fidelity matters more than class-name convenience.
+   ========================================================================== */
+.paper {
+  width: 210mm;
+  height: 297mm;
+  background: #ffffff;
+  color: #2b2310;
+  box-shadow: 0 1px 2px rgba(80, 60, 10, 0.08), 0 18px 40px -18px rgba(80, 60, 10, 0.28);
+  padding: 13mm 14mm 10mm;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  font-family: var(--font-ui);
+  font-size: calc(9.6px * var(--ds, 1));
+  line-height: 1.45;
+}
+.paper.measuring { height: auto; min-height: 0; }
+.paper.measuring .sheet-foot { margin-top: 0; }
+.paper.measuring .sheet { flex: 0 0 auto; }
+.sheet { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+
+.sheet-mast { display: flex; justify-content: space-between; align-items: flex-start; gap: 12mm; }
+.sheet-mast .who { display: flex; gap: 9px; align-items: flex-start; min-width: 0; }
+.sheet-logo { max-width: 24mm; max-height: 16mm; object-fit: contain; }
+.co-name {
+  font-family: var(--font-doc);
+  font-size: calc(19px * var(--ds, 1));
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+  color: #2b2310;
+}
+.co-parent {
+  font-size: calc(8.6px * var(--ds, 1));
+  color: #8a6a1c;
+  font-style: italic;
+  margin: 2px 0 0;
+}
+.co-tag {
+  font-size: calc(8.4px * var(--ds, 1));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a6400;
+  font-weight: 600;
+  margin: 3px 0 6px;
+}
+.co-meta {
+  font-size: calc(8.6px * var(--ds, 1));
+  color: #6b5c3c;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.doc-title {
+  font-family: var(--font-doc);
+  font-size: calc(22px * var(--ds, 1));
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-align: right;
+  color: #b87400;
+  line-height: 1;
+  margin: 0 0 7px;
+}
+.kv { display: grid; grid-template-columns: auto auto; gap: 2.5px 10px; margin: 0; justify-content: end; }
+.kv dt {
+  color: #6b5c3c;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: calc(7.6px * var(--ds, 1));
+  align-self: center;
+  text-align: right;
+  font-weight: 600;
+}
+.kv dd {
+  margin: 0;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: #2b2310;
+  font-size: calc(8.8px * var(--ds, 1));
+  text-align: right;
+}
+.sheet-rule { height: 1.6px; background: #e0a100; margin-top: 8px; }
+
+.parties {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 10mm;
+  padding: 8px 0 9px;
+  border-bottom: 1px solid #ece2cc;
+}
+.p-label {
+  font-size: calc(7.6px * var(--ds, 1));
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #9a6400;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+.p-name { font-family: var(--font-doc); font-size: calc(12.5px * var(--ds, 1)); font-weight: 600; line-height: 1.25; }
+.p-body {
+  font-size: calc(8.8px * var(--ds, 1));
+  color: #6b5c3c;
+  line-height: 1.55;
+  white-space: pre-line;
+  margin-top: 2px;
+}
+
+table.lines { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+table.lines th {
+  font-size: calc(7.7px * var(--ds, 1));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #9a6400;
+  text-align: left;
+  padding: 5px;
+  border-bottom: 1.2px solid #e0a100;
+  background: #fff8e8;
+}
+table.lines td {
+  padding: 5.5px 5px;
+  border-bottom: 1px solid #f0e8d6;
+  vertical-align: top;
+  font-size: calc(9.4px * var(--ds, 1));
+  word-wrap: break-word;
+}
+table.lines .n, table.lines th.n { text-align: right; }
+table.lines td.n { font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.lines .c, table.lines th.c { text-align: center; }
+table.lines td.c { font-family: var(--font-num); font-size: calc(8.6px * var(--ds, 1)); color: #6b5c3c; }
+table.lines td.sl { font-family: var(--font-num); font-size: calc(8.4px * var(--ds, 1)); color: #6b5c3c; }
+.l-desc { font-weight: 600; }
+.l-note {
+  font-size: calc(8.4px * var(--ds, 1));
+  color: #6b5c3c;
+  line-height: 1.5;
+  margin-top: 1.5px;
+  white-space: pre-line;
+  font-weight: 400;
+}
+
+.sheet-foot { margin-top: auto; padding-top: 10px; }
+.sums { display: grid; grid-template-columns: 1fr minmax(70mm, 82mm); gap: 9mm; align-items: start; }
+.words-val {
+  font-family: var(--font-doc);
+  font-size: calc(10.4px * var(--ds, 1));
+  font-weight: 600;
+  color: #2b2310;
+  line-height: 1.4;
+}
+.tax-note {
+  margin-top: 7px;
+  font-size: calc(8.2px * var(--ds, 1));
+  color: #6b5c3c;
+  line-height: 1.5;
+  border-left: 2px solid #ffb81f;
+  padding-left: 6px;
+}
+table.sum { width: 100%; border-collapse: collapse; }
+table.sum td { padding: 3.2px 0; font-size: calc(9.2px * var(--ds, 1)); }
+table.sum td:last-child {
+  text-align: right;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+table.sum tr.sep td { border-top: 1px solid #ece2cc; padding-top: 5px; }
+table.sum tr.dim td { color: #6b5c3c; }
+table.sum tr.grand td {
+  border-top: 1.6px solid #e0a100;
+  padding-top: 6px;
+  font-weight: 700;
+  font-family: var(--font-doc);
+  font-size: calc(11.6px * var(--ds, 1));
+}
+table.sum tr.grand td:last-child {
+  font-family: var(--font-num);
+  color: #b87400;
+  font-size: calc(12.6px * var(--ds, 1));
+}
+
+.blocks {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 9mm;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #ece2cc;
+}
+.terms-body, .bank-body {
+  font-size: calc(8.3px * var(--ds, 1));
+  color: #4a3f28;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.sign { text-align: right; margin-top: 4mm; }
+.sign-for { font-family: var(--font-doc); font-size: calc(9.6px * var(--ds, 1)); font-weight: 600; }
+.sign-line {
+  display: inline-block;
+  min-width: 50mm;
+  border-top: 1px solid #2b2310;
+  padding-top: 3px;
+  margin-top: 10mm;
+  font-size: calc(8.6px * var(--ds, 1));
+  text-align: center;
+}
+.sign-line span { display: block; color: #6b5c3c; font-size: calc(7.8px * var(--ds, 1)); }
+.p-foot {
+  margin-top: 7px;
+  padding-top: 5px;
+  border-top: 1px solid #ece2cc;
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  font-size: calc(7.5px * var(--ds, 1));
+  color: #6b5c3c;
+  letter-spacing: 0.03em;
+}
+.stamp {
+  position: absolute;
+  top: 13mm;
+  right: 14mm;
+  font-family: var(--font-num);
+  font-size: calc(8px * var(--ds, 1));
+  letter-spacing: 0.2em;
+  color: #b87400;
+  border: 1px solid #ffb81f;
+  background: #fff8e8;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ---------- print: the sheet, nothing else ---------- */
+@page { size: A4; margin: 0; }
+@media print {
+  .no-print { display: none !important; }
+  html, body, #root { height: auto; background: #fff; }
+  .print-root { display: block !important; padding: 0 !important; overflow: visible !important; }
+  .paper-scale { transform: none !important; width: auto !important; height: auto !important; }
+  .paper { box-shadow: none; width: 210mm; height: 297mm; }
+}
