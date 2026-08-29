@@ -99,11 +99,13 @@ insert into business_settings (id) values (1) on conflict (id) do nothing;
 create table if not exists quotations (
   id uuid primary key default gen_random_uuid(),
 
-  -- Issued number. Immutable once assigned; the unique index is what actually
-  -- guarantees no duplicates survive a race the function somehow lost.
-  quote_no text not null unique,
-  fy text not null,                      -- '2026-27'
-  seq integer not null,                  -- 7  -> AC/2026-27/007
+  -- Issued number. Filled by the quotations_assign_number trigger below, so the
+  -- client never sends these; the empty defaults just keep a bare INSERT legal
+  -- until the BEFORE trigger fires. The unique index is the last line of
+  -- defence behind the trigger's lock.
+  quote_no text not null unique default '',
+  fy text not null default '',           -- '2026-27'
+  seq integer not null default 0,        -- 7  -> AC/2026-27/007
 
   status text not null default 'draft' check (status in ('draft', 'sent', 'accepted', 'declined', 'expired')),
 
@@ -196,29 +198,50 @@ as $$
       || lpad((coalesce((select max(seq) from quotations where fy = fy_label(d)), 0) + 1)::text, 3, '0');
 $$;
 
--- Issue the next number for real. Serialised: concurrent callers queue on the
--- advisory lock, so two saves in the same instant get 008 and 009, never 008
--- twice. Derived from max(seq), so a backfilled historical row shifts the
--- sequence forward automatically.
-create or replace function next_quotation_number(d date default current_date)
-returns table (quote_no text, fy text, seq integer)
+-- Issue the number, inside the inserting transaction.
+--
+-- This is a BEFORE INSERT trigger and not an RPC the client calls first, and
+-- that distinction is the whole point. An RPC runs in its own transaction, so
+-- an advisory lock taken inside it is released the moment it returns -- before
+-- the client's separate INSERT. Two concurrent saves could both be handed 007,
+-- and only the unique index would catch it, after the fact.
+--
+-- Here the lock and the INSERT are the same transaction, so concurrent inserts
+-- genuinely queue and receive distinct numbers. Derived from max(seq), so a
+-- backfilled historical row shifts the sequence forward on its own; an insert
+-- that supplies quote_no explicitly (backfilling one) is left alone.
+create or replace function assign_quotation_number()
+returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_fy text := fy_label(d);
+  v_fy text;
   v_seq integer;
   v_prefix text;
 begin
+  if new.quote_no is not null and new.quote_no <> '' then
+    return new;
+  end if;
+
+  v_fy := fy_label(new.quote_date);
   perform pg_advisory_xact_lock(hashtext('aali_quotation_seq_' || v_fy));
 
   select coalesce(max(q.seq), 0) + 1 into v_seq from quotations q where q.fy = v_fy;
   select coalesce(b.quote_prefix, 'AC') into v_prefix from business_settings b where b.id = 1;
 
-  return query select v_prefix || '/' || v_fy || '/' || lpad(v_seq::text, 3, '0'), v_fy, v_seq;
+  new.fy := v_fy;
+  new.seq := v_seq;
+  new.quote_no := v_prefix || '/' || v_fy || '/' || lpad(v_seq::text, 3, '0');
+  return new;
 end;
 $$;
+
+drop trigger if exists quotations_assign_number on quotations;
+create trigger quotations_assign_number
+  before insert on quotations
+  for each row execute function assign_quotation_number();
 
 -- ---------------------------------------------------------------------------
 -- 5. Row level security
@@ -272,12 +295,13 @@ create policy quotations_delete on quotations
 -- needs EXECUTE on it at all.
 revoke execute on function handle_new_user() from public, anon, authenticated;
 
--- These reveal how many quotations the company has issued -- fine for a
--- signed-in colleague, nobody else's business.
+-- Trigger-only, same reasoning.
+revoke execute on function assign_quotation_number() from public, anon, authenticated;
+
+-- Reveals how many quotations the company has issued -- fine for a signed-in
+-- colleague, nobody else's business. Read-only: it does not consume a number.
 revoke execute on function peek_quotation_number(date) from public, anon;
-revoke execute on function next_quotation_number(date) from public, anon;
 grant execute on function peek_quotation_number(date) to authenticated;
-grant execute on function next_quotation_number(date) to authenticated;
 
 -- Answers only "is the caller an admin". The RLS policies call it, so
 -- authenticated must keep EXECUTE; anonymous callers have no rows anyway.

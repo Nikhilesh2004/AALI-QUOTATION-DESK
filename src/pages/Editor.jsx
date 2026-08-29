@@ -108,33 +108,16 @@ export default function Editor() {
         if (err) throw err;
         setQuote(data);
       } else {
-        // The number comes from the database, never from the browser. On the
-        // vanishingly rare chance the unique index still rejects the insert
-        // (a number issued and inserted between our two calls), ask for the
-        // next one and try again rather than showing the user an error.
-        let inserted = null;
-        for (let attempt = 0; attempt < 3 && !inserted; attempt += 1) {
-          const { data: issued, error: rpcErr } = await supabase
-            .rpc('next_quotation_number', { d: payload.quote_date });
-          if (rpcErr) throw rpcErr;
-          const row = Array.isArray(issued) ? issued[0] : issued;
+        // quote_no / fy / seq are assigned by a BEFORE INSERT trigger, inside
+        // this insert's own transaction. The browser never proposes a number,
+        // so there is no window between choosing one and using it.
+        const { data: inserted, error: err } = await supabase
+          .from('quotations')
+          .insert({ ...payload, created_by: session.user.id })
+          .select()
+          .single();
+        if (err) throw err;
 
-          const { data, error: err } = await supabase
-            .from('quotations')
-            .insert({
-              ...payload,
-              quote_no: row.quote_no,
-              fy: row.fy,
-              seq: row.seq,
-              created_by: session.user.id,
-            })
-            .select()
-            .single();
-
-          if (!err) inserted = data;
-          else if (err.code !== '23505') throw err;
-        }
-        if (!inserted) throw new Error('Could not obtain a free quotation number. Try again.');
         setQuote(inserted);
         navigate(`/quotation/${inserted.id}`, { replace: true });
       }
